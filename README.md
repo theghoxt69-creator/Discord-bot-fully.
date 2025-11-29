@@ -99,6 +99,13 @@ python main.py
 - **Nickname management** - Change nicknames
 - **Infraction tracking** - View all warnings
 
+### 📝 Staff Applications
+- **Apply panels** - Per-team panels with buttons + modals
+- **Custom templates** - Up to 5 fields per template (motivation, experience, etc.)
+- **Review workflow** - Pending/interview/accepted/rejected with buttons or commands
+- **Persistent views** - Panels/review buttons survive restarts
+- **DM notifications** - Applicants notified on submission and status changes
+
 ### 🎁 Giveaway System
 - **Button-based entry** - Easy participation
 - **Multiple winners** - Support for multiple winners
@@ -198,6 +205,7 @@ ENVIRONMENT=production
 - `/balance [user]` - Check balance
 - `/leaderboard` - View server leaderboard
 - `/report <user> <category> <reason> [message_link]` - Report a user to moderators (guild-only)
+- `/staffapp apply` - Use Apply buttons posted by templates to submit staff applications (modal)
 
 ### 🔧 ADMIN COMMANDS (Administrators only)
 
@@ -286,6 +294,17 @@ ENVIRONMENT=production
 - `/reload <cog>` - Reload cog
 - `/sync` - Sync commands
 - `/setlogchannel <channel>` - Set log channel
+
+#### Staff Applications
+- `/staffapp config set-creator-role <role>` - Set creator role (admins only)
+- `/staffapp config add-reviewer-role <role>` - Add reviewer role
+- `/staffapp config remove-reviewer-role <role>` - Remove reviewer role
+- `/staffapp config show` - Show current staff app roles
+- `/staffapp template create ...` - Create a staff application template and post Apply panel
+- `/staffapp template list` - List templates
+- `/staffapp template enable|disable <template_id>` - Toggle template
+- `/staffapp queue [team_role] [status]` - List applications
+- `/staffapp set-status <application_id> <status> [notes]` - Update application status
 
 ### 🛡️ MODERATOR COMMANDS
 - `/warn <user> <reason>` - Warn user
