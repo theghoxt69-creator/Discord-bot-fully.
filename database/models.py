@@ -210,3 +210,166 @@ class AnalyticsEvent:
             "timestamp": self.timestamp,
             **self.data
         }
+
+
+@dataclass
+class StaffApplicationField:
+    """Field configuration for staff applications"""
+    key: str
+    label: str
+    style: str  # "short" | "paragraph"
+    required: bool = True
+    max_length: int = 1000
+    placeholder: Optional[str] = None
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert to dictionary"""
+        return {
+            "key": self.key,
+            "label": self.label,
+            "style": self.style,
+            "required": self.required,
+            "max_length": self.max_length,
+            "placeholder": self.placeholder,
+        }
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "StaffApplicationField":
+        """Create from dictionary"""
+        return cls(
+            key=data["key"],
+            label=data["label"],
+            style=data.get("style", "paragraph"),
+            required=data.get("required", True),
+            max_length=data.get("max_length", 1000),
+            placeholder=data.get("placeholder"),
+        )
+
+
+@dataclass
+class StaffApplicationTemplate:
+    """Template describing a staff application form"""
+    guild_id: int
+    template_id: str
+    name: str
+    description: str
+    team_role_id: Optional[int]
+    apply_channel_id: int
+    review_channel_id: int
+    fields: List[StaffApplicationField]
+    created_by_id: int
+    created_at: datetime = field(default_factory=datetime.utcnow)
+    is_active: bool = True
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert to dictionary"""
+        return {
+            "guild_id": self.guild_id,
+            "template_id": self.template_id,
+            "name": self.name,
+            "description": self.description,
+            "team_role_id": self.team_role_id,
+            "apply_channel_id": self.apply_channel_id,
+            "review_channel_id": self.review_channel_id,
+            "fields": [f.to_dict() for f in self.fields],
+            "created_by_id": self.created_by_id,
+            "created_at": self.created_at,
+            "is_active": self.is_active,
+        }
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "StaffApplicationTemplate":
+        """Create from dictionary"""
+        return cls(
+            guild_id=data["guild_id"],
+            template_id=str(data["template_id"]),
+            name=data["name"],
+            description=data.get("description", ""),
+            team_role_id=data.get("team_role_id"),
+            apply_channel_id=data["apply_channel_id"],
+            review_channel_id=data["review_channel_id"],
+            fields=[StaffApplicationField.from_dict(f) for f in data.get("fields", [])],
+            created_by_id=data["created_by_id"],
+            created_at=data.get("created_at", datetime.utcnow()),
+            is_active=data.get("is_active", True),
+        )
+
+
+@dataclass
+class StaffApplicationAnswer:
+    """Answer to a staff application field"""
+    key: str
+    label: str
+    value: str
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert to dictionary"""
+        return {
+            "key": self.key,
+            "label": self.label,
+            "value": self.value,
+        }
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "StaffApplicationAnswer":
+        """Create from dictionary"""
+        return cls(
+            key=data["key"],
+            label=data["label"],
+            value=data["value"],
+        )
+
+
+@dataclass
+class StaffApplication:
+    """Staff application submission"""
+    guild_id: int
+    template_id: str
+    application_id: str
+    applicant_id: int
+    team_role_id: Optional[int]
+    answers: List[StaffApplicationAnswer]
+    status: str = "pending"
+    created_at: datetime = field(default_factory=datetime.utcnow)
+    updated_at: datetime = field(default_factory=datetime.utcnow)
+    reviewed_by_id: Optional[int] = None
+    review_notes: Optional[str] = None
+    review_channel_id: int = 0
+    review_message_id: int = 0
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert to dictionary"""
+        return {
+            "guild_id": self.guild_id,
+            "template_id": self.template_id,
+            "application_id": self.application_id,
+            "applicant_id": self.applicant_id,
+            "team_role_id": self.team_role_id,
+            "answers": [a.to_dict() for a in self.answers],
+            "status": self.status,
+            "created_at": self.created_at,
+            "updated_at": self.updated_at,
+            "reviewed_by_id": self.reviewed_by_id,
+            "review_notes": self.review_notes,
+            "review_channel_id": self.review_channel_id,
+            "review_message_id": self.review_message_id,
+        }
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "StaffApplication":
+        """Create from dictionary"""
+        return cls(
+            guild_id=data["guild_id"],
+            template_id=str(data["template_id"]),
+            application_id=str(data["application_id"]),
+            applicant_id=data["applicant_id"],
+            team_role_id=data.get("team_role_id"),
+            answers=[StaffApplicationAnswer.from_dict(a) for a in data.get("answers", [])],
+            status=data.get("status", "pending"),
+            created_at=data.get("created_at", datetime.utcnow()),
+            updated_at=data.get("updated_at", datetime.utcnow()),
+            reviewed_by_id=data.get("reviewed_by_id"),
+            review_notes=data.get("review_notes"),
+            review_channel_id=data.get("review_channel_id", 0),
+            review_message_id=data.get("review_message_id", 0),
+        )

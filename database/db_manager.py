@@ -7,6 +7,7 @@ import asyncio
 from typing import Optional, Dict, Any, List
 from motor.motor_asyncio import AsyncIOMotorClient, AsyncIOMotorDatabase
 import logging
+from bson import ObjectId
 
 logger = logging.getLogger(__name__)
 
@@ -66,6 +67,21 @@ class DatabaseManager:
         """Access reports collection"""
         return self.db.reports if self.db is not None else None
 
+    @property
+    def staff_application_templates(self):
+        """Access staff application templates collection"""
+        return self.db.staff_application_templates if self.db is not None else None
+
+    @property
+    def staff_applications(self):
+        """Access staff applications collection"""
+        return self.db.staff_applications if self.db is not None else None
+
+    @property
+    def staff_app_config(self):
+        """Access staff applications config collection"""
+        return self.db.staff_app_config if self.db is not None else None
+
     async def _ensure_indexes(self) -> None:
         """Ensure required indexes are present"""
         if self.db is None:
@@ -74,8 +90,15 @@ class DatabaseManager:
         try:
             await self.db.reports.create_index([("guild_id", 1), ("status", 1)])
             await self.db.reports.create_index([("reported_user_id", 1), ("guild_id", 1)])
+            await self.db.staff_application_templates.create_index(
+                [("guild_id", 1), ("template_id", 1)], unique=True
+            )
+            await self.db.staff_applications.create_index([("guild_id", 1), ("status", 1)])
+            await self.db.staff_applications.create_index([("guild_id", 1), ("template_id", 1), ("status", 1)])
+            await self.db.staff_applications.create_index([("applicant_id", 1), ("guild_id", 1)])
+            await self.db.staff_app_config.create_index([("guild_id", 1)], unique=True)
         except Exception as e:
-            logger.warning(f"Failed to ensure report indexes: {e}")
+            logger.warning(f"Failed to ensure database indexes: {e}")
 
     # User operations
     async def get_user(self, user_id: int, guild_id: int) -> Optional[Dict[str, Any]]:
@@ -195,6 +218,87 @@ class DatabaseManager:
         """Create user report"""
         result = await self.db.reports.insert_one(report_data)
         return str(result.inserted_id)
+
+    # Staff applications config operations
+    async def get_staff_app_config(self, guild_id: int) -> Optional[Dict[str, Any]]:
+        """Get staff application config for guild"""
+        if not self.staff_app_config:
+            return None
+        return await self.staff_app_config.find_one({"guild_id": guild_id})
+
+    async def upsert_staff_app_config(self, guild_id: int, data: Dict[str, Any]) -> Dict[str, Any]:
+        """Upsert staff application config"""
+        if not self.staff_app_config:
+            raise RuntimeError("Staff app config collection not available")
+        await self.staff_app_config.update_one(
+            {"guild_id": guild_id},
+            {"$set": {"guild_id": guild_id, **data}},
+            upsert=True
+        )
+        return await self.get_staff_app_config(guild_id)
+
+    # Staff application template operations
+    async def create_staff_template(self, data: Dict[str, Any]) -> str:
+        """Create staff application template"""
+        if not data.get("template_id"):
+            data["template_id"] = str(ObjectId())
+        result = await self.staff_application_templates.insert_one(data)
+        return data["template_id"] if data.get("template_id") else str(result.inserted_id)
+
+    async def get_staff_template(self, guild_id: int, template_id: str) -> Optional[Dict[str, Any]]:
+        """Get staff application template"""
+        return await self.staff_application_templates.find_one({
+            "guild_id": guild_id,
+            "template_id": template_id
+        })
+
+    async def list_staff_templates(self, guild_id: int) -> List[Dict[str, Any]]:
+        """List staff application templates for guild"""
+        cursor = self.staff_application_templates.find({"guild_id": guild_id})
+        return await cursor.to_list(length=100)
+
+    async def list_all_staff_templates(self) -> List[Dict[str, Any]]:
+        """List all staff application templates across guilds"""
+        cursor = self.staff_application_templates.find({})
+        return await cursor.to_list(length=500)
+
+    async def set_staff_template_active(self, guild_id: int, template_id: str, is_active: bool) -> bool:
+        """Toggle template active flag"""
+        result = await self.staff_application_templates.update_one(
+            {"guild_id": guild_id, "template_id": template_id},
+            {"$set": {"is_active": is_active}}
+        )
+        return result.modified_count > 0
+
+    # Staff application operations
+    async def create_staff_application(self, data: Dict[str, Any]) -> str:
+        """Create staff application"""
+        if not data.get("application_id"):
+            data["application_id"] = str(ObjectId())
+        result = await self.staff_applications.insert_one(data)
+        return data["application_id"] if data.get("application_id") else str(result.inserted_id)
+
+    async def update_staff_application(self, guild_id: int, application_id: str, update: Dict[str, Any]) -> bool:
+        """Update staff application"""
+        result = await self.staff_applications.update_one(
+            {"guild_id": guild_id, "application_id": application_id},
+            {"$set": update}
+        )
+        return result.modified_count > 0
+
+    async def get_staff_application(self, guild_id: int, application_id: str) -> Optional[Dict[str, Any]]:
+        """Get staff application"""
+        return await self.staff_applications.find_one({
+            "guild_id": guild_id,
+            "application_id": application_id
+        })
+
+    async def query_staff_applications(self, guild_id: int, **filters) -> List[Dict[str, Any]]:
+        """Query staff applications by filters"""
+        query = {"guild_id": guild_id}
+        query.update({k: v for k, v in filters.items() if v is not None})
+        cursor = self.staff_applications.find(query).sort("created_at", -1)
+        return await cursor.to_list(length=200)
 
     # Tickets operations
     async def create_ticket(self, ticket_data: Dict[str, Any]) -> str:
