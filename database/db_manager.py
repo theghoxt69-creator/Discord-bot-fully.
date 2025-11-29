@@ -64,11 +64,11 @@ class DatabaseManager:
     @property
     def reports(self):
         """Access reports collection"""
-        return self.db.reports if self.db else None
+        return self.db.reports if self.db is not None else None
 
     async def _ensure_indexes(self) -> None:
         """Ensure required indexes are present"""
-        if not self.db:
+        if self.db is None:
             return
 
         try:
