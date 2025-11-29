@@ -222,13 +222,13 @@ class DatabaseManager:
     # Staff applications config operations
     async def get_staff_app_config(self, guild_id: int) -> Optional[Dict[str, Any]]:
         """Get staff application config for guild"""
-        if not self.staff_app_config:
+        if self.staff_app_config is None:
             return None
         return await self.staff_app_config.find_one({"guild_id": guild_id})
 
     async def upsert_staff_app_config(self, guild_id: int, data: Dict[str, Any]) -> Dict[str, Any]:
         """Upsert staff application config"""
-        if not self.staff_app_config:
+        if self.staff_app_config is None:
             raise RuntimeError("Staff app config collection not available")
         await self.staff_app_config.update_one(
             {"guild_id": guild_id},
