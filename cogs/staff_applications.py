@@ -778,4 +778,10 @@ class StaffApplications(commands.Cog):
 
 async def setup(bot: commands.Bot):
     """Setup function for cog loading"""
-    await bot.add_cog(StaffApplications(bot, bot.db, bot.config))
+    cog = StaffApplications(bot, bot.db, bot.config)
+    await bot.add_cog(cog)
+
+    existing = bot.tree.get_command("staffapp")
+    if existing:
+        bot.tree.remove_command("staffapp", type=discord.AppCommandType.chat_input)
+    bot.tree.add_command(cog.staffapp)
