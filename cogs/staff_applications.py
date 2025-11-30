@@ -46,16 +46,24 @@ class StaffApplyView(discord.ui.View):
 
     async def on_apply(self, interaction: discord.Interaction):
         """Handle Apply button click"""
-        template = await self.cog._fetch_template(interaction.guild, self.template_id)
-        if not template:
-            await interaction.response.send_message(
-                embed=EmbedFactory.error("Not Found", "Application template not found or disabled."),
-                ephemeral=True
-            )
-            return
+        try:
+            template = await self.cog._fetch_template(interaction.guild, self.template_id)
+            if not template:
+                await interaction.response.send_message(
+                    embed=EmbedFactory.error("Not Found", "Application template not found or disabled."),
+                    ephemeral=True
+                )
+                return
 
-        modal = StaffApplicationModal(self.cog, template)
-        await interaction.response.send_modal(modal)
+            modal = StaffApplicationModal(self.cog, template)
+            await interaction.response.send_modal(modal)
+        except Exception as e:
+            logger.exception(f"Error handling apply button for template {self.template_id}: {e}")
+            if not interaction.response.is_done():
+                await interaction.response.send_message(
+                    embed=EmbedFactory.error("Error", "Something went wrong opening the application modal."),
+                    ephemeral=True
+                )
 
 
 class StaffApplicationReviewView(discord.ui.View):
@@ -112,61 +120,69 @@ class StaffApplicationModal(discord.ui.Modal):
             self.add_item(text_input)
 
     async def on_submit(self, interaction: discord.Interaction):
-        guild = interaction.guild
-        if guild is None:
+        try:
+            guild = interaction.guild
+            if guild is None:
+                await interaction.response.send_message(
+                    embed=EmbedFactory.error("Guild Only", "Applications must be submitted in a server."),
+                    ephemeral=True
+                )
+                return
+
+            answers = [
+                StaffApplicationAnswer(
+                    key=field.key,
+                    label=field.label,
+                    value=self.inputs[field.key].value
+                )
+                for field in self.template.fields
+            ]
+
+            application = StaffApplication(
+                guild_id=guild.id,
+                template_id=self.template.template_id,
+                application_id="",
+                applicant_id=interaction.user.id,
+                team_role_id=self.template.team_role_id,
+                answers=answers,
+                status="pending",
+                review_channel_id=self.template.review_channel_id,
+                review_message_id=0
+            )
+
+            application_id = await self.cog.db.create_staff_application(application.to_dict())
+            application.application_id = application_id
+
+            review_message_id = await self.cog._post_review_embed(guild, application, self.template)
+            if review_message_id:
+                await self.cog.db.update_staff_application(
+                    guild.id,
+                    application_id,
+                    {
+                        "review_message_id": review_message_id,
+                        "updated_at": datetime.utcnow(),
+                    }
+                )
+
             await interaction.response.send_message(
-                embed=EmbedFactory.error("Guild Only", "Applications must be submitted in a server."),
+                "✅ Your application has been submitted. Staff will review it soon.",
                 ephemeral=True
             )
-            return
 
-        answers = [
-            StaffApplicationAnswer(
-                key=field.key,
-                label=field.label,
-                value=self.inputs[field.key].value
+            await self.cog._notify_applicant_status(
+                interaction.user,
+                self.template,
+                application,
+                "pending",
+                notes=None
             )
-            for field in self.template.fields
-        ]
-
-        application = StaffApplication(
-            guild_id=guild.id,
-            template_id=self.template.template_id,
-            application_id="",
-            applicant_id=interaction.user.id,
-            team_role_id=self.template.team_role_id,
-            answers=answers,
-            status="pending",
-            review_channel_id=self.template.review_channel_id,
-            review_message_id=0
-        )
-
-        application_id = await self.cog.db.create_staff_application(application.to_dict())
-        application.application_id = application_id
-
-        review_message_id = await self.cog._post_review_embed(guild, application, self.template)
-        if review_message_id:
-            await self.cog.db.update_staff_application(
-                guild.id,
-                application_id,
-                {
-                    "review_message_id": review_message_id,
-                    "updated_at": datetime.utcnow(),
-                }
-            )
-
-        await interaction.response.send_message(
-            "✅ Your application has been submitted. Staff will review it soon.",
-            ephemeral=True
-        )
-
-        await self.cog._notify_applicant_status(
-            interaction.user,
-            self.template,
-            application,
-            "pending",
-            notes=None
-        )
+        except Exception as e:
+            logger.exception(f"Error submitting application for template {self.template.template_id}: {e}")
+            if not interaction.response.is_done():
+                await interaction.response.send_message(
+                    embed=EmbedFactory.error("Error", "Failed to submit your application. Please try again."),
+                    ephemeral=True
+                )
 
 
 class StaffApplications(commands.Cog):
@@ -227,13 +243,14 @@ class StaffApplications(commands.Cog):
             StaffApplicationField(key="basic_info", label="Age or basic info", style="short", required=False, max_length=200),
         ]
 
-    async def _get_config(self, guild_id: int) -> Dict[str, List[int]]:
+    async def _get_config(self, guild_id: int) -> Dict[str, Any]:
         """Fetch or create staff app config"""
         config = await self.db.get_staff_app_config(guild_id)
         if not config:
             config = await self.db.upsert_staff_app_config(guild_id, {
                 "creator_roles": [],
-                "reviewer_roles": []
+                "reviewer_roles": [],
+                "default_apply_channel_id": None,
             })
         return config
 
@@ -267,6 +284,26 @@ class StaffApplications(commands.Cog):
         )
         logger.info(f"{interaction.user} set creator role to {role} in {interaction.guild}")
         return updated
+
+    @config_group.command(name="set-apply-channel", description="Set default apply channel for staff applications")
+    async def set_apply_channel(self, interaction: discord.Interaction, channel: discord.TextChannel):
+        config = await self._get_config(interaction.guild.id)
+        if not interaction.user.guild_permissions.administrator:
+            await interaction.response.send_message(
+                embed=EmbedFactory.error("No Permission", "Only admins can set the default apply channel."),
+                ephemeral=True
+            )
+            return
+
+        await self.db.upsert_staff_app_config(interaction.guild.id, {
+            "default_apply_channel_id": channel.id
+        })
+
+        await interaction.response.send_message(
+            embed=EmbedFactory.success("Default Apply Channel Set", f"Applications will default to {channel.mention}"),
+            ephemeral=True
+        )
+        logger.info(f"{interaction.user} set default apply channel to {channel} in {interaction.guild}")
 
     @config_group.command(name="add-reviewer-role", description="Add reviewer role for staff applications")
     async def add_reviewer_role(self, interaction: discord.Interaction, role: discord.Role):
@@ -312,6 +349,7 @@ class StaffApplications(commands.Cog):
         config = await self._get_config(interaction.guild.id)
         creator_roles = config.get("creator_roles", [])
         reviewer_roles = config.get("reviewer_roles", [])
+        default_apply_channel_id = config.get("default_apply_channel_id")
 
         def format_roles(ids: List[int]) -> str:
             return ", ".join(f"<@&{r}>" for r in ids) if ids else "Not set"
@@ -322,6 +360,7 @@ class StaffApplications(commands.Cog):
             fields=[
                 {"name": "Creator Roles", "value": format_roles(creator_roles), "inline": False},
                 {"name": "Reviewer Roles", "value": format_roles(reviewer_roles), "inline": False},
+                {"name": "Default Apply Channel", "value": f"<#{default_apply_channel_id}>" if default_apply_channel_id else "Not set", "inline": False},
             ]
         )
         await interaction.response.send_message(embed=embed, ephemeral=True)
@@ -331,15 +370,15 @@ class StaffApplications(commands.Cog):
     @app_commands.describe(
         name="Template name",
         team_role="Role for the team (optional)",
-        apply_channel="Channel to post the Apply panel",
+        apply_channel="Channel to post the Apply panel (optional; uses default if not set)",
         review_channel="Channel where applications are sent for review",
-        description="Description shown on the apply panel"
+        description="Description shown on the apply panel (supports \\n for new lines)"
     )
     async def template_create(
         self,
         interaction: discord.Interaction,
         name: str,
-        apply_channel: discord.TextChannel,
+        apply_channel: Optional[discord.TextChannel],
         review_channel: discord.TextChannel,
         team_role: Optional[discord.Role] = None,
         description: Optional[str] = None
@@ -360,13 +399,30 @@ class StaffApplications(commands.Cog):
             )
             return
 
+        description_text = (description or "Click Apply to submit your application.").replace("\\n", "\n")
+        apply_channel_id = apply_channel.id if apply_channel else config.get("default_apply_channel_id")
+        if not apply_channel_id:
+            await interaction.response.send_message(
+                embed=EmbedFactory.error("Missing Apply Channel", "Set a default apply channel or provide one in the command."),
+                ephemeral=True
+            )
+            return
+
+        resolved_apply_channel = apply_channel or interaction.guild.get_channel(apply_channel_id)
+        if resolved_apply_channel is None:
+            await interaction.response.send_message(
+                embed=EmbedFactory.error("Apply Channel Not Found", "Could not resolve the apply channel."),
+                ephemeral=True
+            )
+            return
+
         template = StaffApplicationTemplate(
             guild_id=interaction.guild.id,
             template_id="",
             name=name,
-            description=description or "Click Apply to submit your application.",
+            description=description_text,
             team_role_id=team_role.id if team_role else None,
-            apply_channel_id=apply_channel.id,
+            apply_channel_id=apply_channel_id,
             review_channel_id=review_channel.id,
             fields=fields,
             created_by_id=interaction.user.id
@@ -383,13 +439,13 @@ class StaffApplications(commands.Cog):
             footer="Click Apply to submit your application."
         )
 
-        await apply_channel.send(embed=panel_embed, view=view)
+        await resolved_apply_channel.send(embed=panel_embed, view=view)
         self.bot.add_view(view)
 
         await interaction.response.send_message(
             embed=EmbedFactory.success(
                 "Template Created",
-                f"Created application panel in {apply_channel.mention} for **{template.name}**."
+                f"Created application panel in {resolved_apply_channel.mention} for **{template.name}**."
             ),
             ephemeral=True
         )
