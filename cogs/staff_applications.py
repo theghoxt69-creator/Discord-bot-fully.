@@ -397,9 +397,11 @@ class StaffApplications(commands.Cog):
             )
             return
 
+        await interaction.response.defer(ephemeral=True)
+
         fields = self._default_fields()
         if len(fields) > 5:
-            await interaction.response.send_message(
+            await interaction.followup.send(
                 embed=EmbedFactory.error("Invalid Template", "Templates cannot have more than 5 fields."),
                 ephemeral=True
             )
@@ -408,7 +410,7 @@ class StaffApplications(commands.Cog):
         description_text = (description or "Click Apply to submit your application.").replace("\\n", "\n")
         apply_channel_id = apply_channel.id if apply_channel else config.get("default_apply_channel_id")
         if not apply_channel_id:
-            await interaction.response.send_message(
+            await interaction.followup.send(
                 embed=EmbedFactory.error("Missing Apply Channel", "Set a default apply channel or provide one in the command."),
                 ephemeral=True
             )
@@ -416,7 +418,7 @@ class StaffApplications(commands.Cog):
 
         resolved_apply_channel = apply_channel or interaction.guild.get_channel(apply_channel_id)
         if resolved_apply_channel is None:
-            await interaction.response.send_message(
+            await interaction.followup.send(
                 embed=EmbedFactory.error("Apply Channel Not Found", "Could not resolve the apply channel."),
                 ephemeral=True
             )
@@ -448,7 +450,7 @@ class StaffApplications(commands.Cog):
         await resolved_apply_channel.send(embed=panel_embed, view=view)
         self.bot.add_view(view)
 
-        await interaction.response.send_message(
+        await interaction.followup.send(
             embed=EmbedFactory.success(
                 "Template Created",
                 f"Created application panel in {resolved_apply_channel.mention} for **{template.name}**."
