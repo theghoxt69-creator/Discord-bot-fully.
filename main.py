@@ -13,6 +13,7 @@ from pathlib import Path
 import yaml
 from dotenv import load_dotenv
 from discord import app_commands
+from discord.app_commands.errors import CommandSignatureMismatch
 
 from database.db_manager import DatabaseManager
 from utils.logger import BotLogger
@@ -74,20 +75,21 @@ class Logiq(commands.Bot):
         await self.load_cogs()
 
         async def on_tree_error(interaction: discord.Interaction, error: app_commands.AppCommandError):
-            self.logger.error(
+            log = logging.getLogger("logiq.app_commands")
+            log.error(
                 "App command error in %s: %r",
                 getattr(interaction.command, "qualified_name", "unknown"),
                 error,
                 exc_info=True,
             )
             try:
-                msg = "❌ An internal error occurred while handling this command."
+                msg = "Une erreur interne est survenue lors de l'execution de cette commande."
                 if interaction.response.is_done():
                     await interaction.followup.send(msg, ephemeral=True)
                 else:
                     await interaction.response.send_message(msg, ephemeral=True)
             except Exception:
-                self.logger.exception("Failed to send app command error response")
+                log.exception("Failed to send app command error response")
 
         self.tree.on_error = on_tree_error
 
@@ -171,18 +173,21 @@ class Logiq(commands.Bot):
         error: app_commands.AppCommandError,
     ):
         """Global handler for app command errors to avoid timeouts"""
-        self.logger.error(
-            f"App command error in {getattr(interaction.command, 'qualified_name', 'unknown')}: {error}",
+        log = logging.getLogger("logiq.app_commands")
+        log.error(
+            "App command error in %s: %r",
+            getattr(interaction.command, "qualified_name", "unknown"),
+            error,
             exc_info=True,
         )
         try:
-            msg = "❌ Une erreur interne est survenue lors de l’exécution de cette commande."
+            msg = "Une erreur interne est survenue lors de l'execution de cette commande."
             if interaction.response.is_done():
                 await interaction.followup.send(msg, ephemeral=True)
             else:
                 await interaction.response.send_message(msg, ephemeral=True)
         except Exception:
-            self.logger.error("Failed to send app command error response", exc_info=True)
+            log.error("Failed to send app command error response", exc_info=True)
 
 
 def load_config(config_path: str = 'config.yaml') -> dict:
