@@ -84,8 +84,14 @@ class VCMod(commands.Cog):
     )
     async def suspend(self, interaction: discord.Interaction, user: discord.Member, duration: app_commands.Choice[str], reason: str = "No reason provided"):
         try:
+            await interaction.response.defer(ephemeral=True, thinking=True)
+        except Exception:
+            logger.exception("Failed to defer vcmod suspend")
+            return
+
+        try:
             if not await self._can_use(interaction.user, FeatureKey.MOD_VC_SUSPEND):
-                await interaction.response.send_message(
+                await interaction.followup.send(
                     embed=EmbedFactory.error("No Permission", "You do not have permission to use this command."),
                     ephemeral=True
                 )
@@ -93,7 +99,7 @@ class VCMod(commands.Cog):
 
             block = self._hierarchy_block(interaction.user, user)
             if block:
-                await interaction.response.send_message(
+                await interaction.followup.send(
                     embed=EmbedFactory.error("Cannot Suspend", block),
                     ephemeral=True
                 )
@@ -105,13 +111,13 @@ class VCMod(commands.Cog):
             try:
                 await user.edit(communication_disabled_until=ends_at, reason=reason)
             except discord.Forbidden:
-                await interaction.response.send_message(
+                await interaction.followup.send(
                     embed=EmbedFactory.error("Error", "I don't have permission to timeout that user."),
                     ephemeral=True
                 )
                 return
             except discord.HTTPException as e:
-                await interaction.response.send_message(
+                await interaction.followup.send(
                     embed=EmbedFactory.error("Error", f"Failed to apply timeout: {e}"),
                     ephemeral=True
                 )
@@ -130,7 +136,7 @@ class VCMod(commands.Cog):
             )
             await self.db.create_suspension(suspension.to_dict())
 
-            await interaction.response.send_message(
+            await interaction.followup.send(
                 embed=EmbedFactory.success(
                     "Suspended",
                     f"{user.mention} has been suspended for {duration.value}."
@@ -159,16 +165,10 @@ class VCMod(commands.Cog):
                 logger.debug(f"Could not DM suspended user {user.id}")
         except Exception as e:
             logger.exception(f"Error in vcmod suspend: {e}")
-            if not interaction.response.is_done():
-                await interaction.response.send_message(
-                    embed=EmbedFactory.error("Error", "Something went wrong applying the suspension."),
-                    ephemeral=True
-                )
-            else:
-                await interaction.followup.send(
-                    embed=EmbedFactory.error("Error", "Something went wrong applying the suspension."),
-                    ephemeral=True
-                )
+            await interaction.followup.send(
+                embed=EmbedFactory.error("Error", "Something went wrong applying the suspension."),
+                ephemeral=True
+            )
 
     @vcmod.command(name="unsuspend", description="Remove a suspension early")
     @app_commands.describe(
@@ -177,8 +177,14 @@ class VCMod(commands.Cog):
     )
     async def unsuspend(self, interaction: discord.Interaction, user: discord.Member, reason: str = "No reason provided"):
         try:
+            await interaction.response.defer(ephemeral=True, thinking=True)
+        except Exception:
+            logger.exception("Failed to defer vcmod unsuspend")
+            return
+
+        try:
             if not await self._can_use(interaction.user, FeatureKey.MOD_VC_UNSUSPEND):
-                await interaction.response.send_message(
+                await interaction.followup.send(
                     embed=EmbedFactory.error("No Permission", "You do not have permission to use this command."),
                     ephemeral=True
                 )
@@ -186,7 +192,7 @@ class VCMod(commands.Cog):
 
             block = self._hierarchy_block(interaction.user, user)
             if block:
-                await interaction.response.send_message(
+                await interaction.followup.send(
                     embed=EmbedFactory.error("Cannot Unsuspend", block),
                     ephemeral=True
                 )
@@ -195,13 +201,13 @@ class VCMod(commands.Cog):
             try:
                 await user.edit(communication_disabled_until=None, reason=reason)
             except discord.Forbidden:
-                await interaction.response.send_message(
+                await interaction.followup.send(
                     embed=EmbedFactory.error("Error", "I don't have permission to modify that user."),
                     ephemeral=True
                 )
                 return
             except discord.HTTPException as e:
-                await interaction.response.send_message(
+                await interaction.followup.send(
                     embed=EmbedFactory.error("Error", f"Failed to remove timeout: {e}"),
                     ephemeral=True
                 )
@@ -213,7 +219,7 @@ class VCMod(commands.Cog):
                 {"active": False, "resolved_at": datetime.now(timezone.utc), "resolved_by": interaction.user.id, "reason": reason}
             )
 
-            await interaction.response.send_message(
+            await interaction.followup.send(
                 embed=EmbedFactory.success("Unsuspended", f"{user.mention} has been unsuspended."),
                 ephemeral=True
             )
@@ -237,16 +243,10 @@ class VCMod(commands.Cog):
                 logger.debug(f"Could not DM unsuspended user {user.id}")
         except Exception as e:
             logger.exception(f"Error in vcmod unsuspend: {e}")
-            if not interaction.response.is_done():
-                await interaction.response.send_message(
-                    embed=EmbedFactory.error("Error", "Something went wrong removing the suspension."),
-                    ephemeral=True
-                )
-            else:
-                await interaction.followup.send(
-                    embed=EmbedFactory.error("Error", "Something went wrong removing the suspension."),
-                    ephemeral=True
-                )
+            await interaction.followup.send(
+                embed=EmbedFactory.error("Error", "Something went wrong removing the suspension."),
+                ephemeral=True
+            )
 
     @vcmod.command(name="status", description="Check a user's suspension status")
     @app_commands.describe(user="User to check")
