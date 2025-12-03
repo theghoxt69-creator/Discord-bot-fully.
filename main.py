@@ -52,6 +52,7 @@ class Logiq(commands.Bot):
         pool_size = db_config.get('pool_size', 10)
 
         self.db = DatabaseManager(mongodb_uri, database_name, pool_size)
+        self.perms = None  # initialized in setup_hook
 
     async def setup_hook(self):
         """Setup hook - called when bot is starting"""
@@ -61,6 +62,9 @@ class Logiq(commands.Bot):
         try:
             await self.db.connect()
             self.logger.info("Database connected successfully")
+            # Attach global feature permission manager
+            from utils.feature_permissions import FeaturePermissionManager
+            self.perms = FeaturePermissionManager(self.db)
         except Exception as e:
             self.logger.error(f"Failed to connect to database: {e}", exc_info=True)
             sys.exit(1)
