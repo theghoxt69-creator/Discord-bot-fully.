@@ -38,6 +38,7 @@ class FeaturePermissions(commands.Cog):
         self.bot = bot
         self.db = db
         self.manager = bot.perms if hasattr(bot, "perms") else FeaturePermissionManager(db)
+        self.log = logging.getLogger("logiq.feature_permissions")
 
     async def _log_to_mod(self, guild: discord.Guild, embed: discord.Embed):
         guild_config = await self.db.get_guild(guild.id)
@@ -203,6 +204,17 @@ class FeaturePermissions(commands.Cog):
             color=EmbedColor.INFO
         )
         await self._log_to_mod(interaction.guild, log_embed)
+
+    @perms.command(name="debug", description="Debug perms wiring")
+    async def perms_debug(self, interaction: discord.Interaction):
+        self.log.info(
+            "perms/debug invoked by user=%s (%s) guild=%s",
+            interaction.user, interaction.user.id, interaction.guild_id
+        )
+        await interaction.response.send_message(
+            f"✅ perms/debug OK – guild={interaction.guild_id}, admin={interaction.user.guild_permissions.administrator}",
+            ephemeral=True,
+        )
 
 
 async def setup(bot: commands.Bot):

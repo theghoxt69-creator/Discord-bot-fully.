@@ -12,6 +12,7 @@ import sys
 from pathlib import Path
 import yaml
 from dotenv import load_dotenv
+from discord import app_commands
 
 from database.db_manager import DatabaseManager
 from utils.logger import BotLogger
@@ -145,6 +146,25 @@ class Logiq(commands.Bot):
         self.logger.info("Shutting down bot...")
         await self.db.disconnect()
         await super().close()
+
+    async def on_app_command_error(
+        self,
+        interaction: discord.Interaction,
+        error: app_commands.AppCommandError,
+    ):
+        """Global handler for app command errors to avoid timeouts"""
+        self.logger.error(
+            f"App command error in {getattr(interaction.command, 'qualified_name', 'unknown')}: {error}",
+            exc_info=True,
+        )
+        try:
+            msg = "❌ Une erreur interne est survenue lors de l’exécution de cette commande."
+            if interaction.response.is_done():
+                await interaction.followup.send(msg, ephemeral=True)
+            else:
+                await interaction.response.send_message(msg, ephemeral=True)
+        except Exception:
+            self.logger.error("Failed to send app command error response", exc_info=True)
 
 
 def load_config(config_path: str = 'config.yaml') -> dict:
