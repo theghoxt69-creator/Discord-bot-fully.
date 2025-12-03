@@ -30,7 +30,7 @@ class VCMod(commands.Cog):
     def __init__(self, bot: commands.Bot, db: DatabaseManager):
         self.bot = bot
         self.db = db
-        self.perms = FeaturePermissionManager(db)
+        self.perms = bot.perms if hasattr(bot, "perms") else FeaturePermissionManager(db)
 
     async def _log_to_mod(self, guild: discord.Guild, embed: discord.Embed):
         guild_config = await self.db.get_guild(guild.id)

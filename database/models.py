@@ -382,8 +382,15 @@ class FeatureKey(str, Enum):
     MOD_VC_SUSPEND = "mod.vc_suspend"
     MOD_VC_UNSUSPEND = "mod.vc_unsuspend"
     MOD_WARN = "mod.warn"
+    MOD_WARNINGS = "mod.warnings"
     MOD_TIMEOUT = "mod.timeout"
     MOD_BAN = "mod.ban"
+    MOD_KICK = "mod.kick"
+    MOD_CLEAR = "mod.clear"
+    MOD_SLOWMODE = "mod.slowmode"
+    MOD_LOCK = "mod.lock"
+    MOD_NICKNAME = "mod.nickname"
+    REPORT_CREATE = "report.create"
 
     # Tickets
     TICKETS_CREATE = "tickets.create"
