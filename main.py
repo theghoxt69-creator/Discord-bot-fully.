@@ -124,10 +124,10 @@ class Logiq(commands.Bot):
         self.tree.on_error = on_tree_error
 
     @commands.command(name="sync")
-    @commands.is_owner()
+    @commands.has_permissions(administrator=True)
     async def sync_commands(self, ctx: commands.Context, spec: str | None = None):
         """
-        Owner-only helper to resync application commands.
+        Admin/owner helper to resync application commands.
 
         Usage:
           !sync            -> global sync (can take time to propagate)
