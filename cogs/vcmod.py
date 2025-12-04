@@ -96,6 +96,13 @@ class VCMod(commands.Cog):
             await interaction.response.defer(ephemeral=True, thinking=True)
         except Exception:
             logger.exception("Failed to defer vcmod suspend")
+            try:
+                await interaction.response.send_message(
+                    embed=EmbedFactory.error("Error", "Could not acknowledge the command; please try again."),
+                    ephemeral=True,
+                )
+            except Exception:
+                logger.exception("Failed to send response after defer failure in vcmod suspend")
             return
 
         try:
@@ -197,6 +204,13 @@ class VCMod(commands.Cog):
             await interaction.response.defer(ephemeral=True, thinking=True)
         except Exception:
             logger.exception("Failed to defer vcmod unsuspend")
+            try:
+                await interaction.response.send_message(
+                    embed=EmbedFactory.error("Error", "Could not acknowledge the command; please try again."),
+                    ephemeral=True,
+                )
+            except Exception:
+                logger.exception("Failed to send response after defer failure in vcmod unsuspend")
             return
 
         try:
@@ -268,8 +282,21 @@ class VCMod(commands.Cog):
     @vcmod.command(name="status", description="Check a user's suspension status")
     @app_commands.describe(user="User to check")
     async def status(self, interaction: discord.Interaction, user: discord.Member):
+        try:
+            await interaction.response.defer(ephemeral=True, thinking=True)
+        except Exception:
+            logger.exception("Failed to defer vcmod status")
+            try:
+                await interaction.response.send_message(
+                    embed=EmbedFactory.error("Error", "Could not acknowledge the command; please try again."),
+                    ephemeral=True,
+                )
+            except Exception:
+                logger.exception("Failed to send response after defer failure in vcmod status")
+            return
+
         if not await self._can_use(interaction.user, FeatureKey.MOD_VC_SUSPEND):
-            await interaction.response.send_message(
+            await interaction.followup.send(
                 embed=EmbedFactory.error("No Permission", "You do not have permission to view suspension status."),
                 ephemeral=True
             )
@@ -296,7 +323,7 @@ class VCMod(commands.Cog):
             description="\n".join(status_lines),
             color=EmbedColor.INFO
         )
-        await interaction.response.send_message(embed=embed, ephemeral=True)
+        await interaction.followup.send(embed=embed, ephemeral=True)
 
 
 async def setup(bot: commands.Bot):

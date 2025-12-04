@@ -66,8 +66,15 @@ class FeaturePermissions(commands.Cog):
 
     @perms.command(name="feature-list", description="List feature permission overrides")
     async def feature_list(self, interaction: discord.Interaction):
+        if not interaction.response.is_done():
+            try:
+                await interaction.response.defer(ephemeral=True, thinking=True)
+            except Exception:
+                logger.exception("Failed to defer perms feature-list")
+                return
+
         if not _is_config_admin(interaction.user):
-            await interaction.response.send_message(
+            await interaction.followup.send(
                 embed=EmbedFactory.error("No Permission", "Only Admin/Manage Guild can view permissions."),
                 ephemeral=True
             )
@@ -90,7 +97,7 @@ class FeaturePermissions(commands.Cog):
             description=description,
             color=EmbedColor.INFO
         )
-        await interaction.response.send_message(embed=embed, ephemeral=True)
+        await interaction.followup.send(embed=embed, ephemeral=True)
 
     @perms.command(name="feature-allow", description="Allow a role to use a feature")
     @app_commands.choices(feature=[app_commands.Choice(name=k.value, value=k.value) for k in FeatureKey])
