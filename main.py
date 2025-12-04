@@ -76,9 +76,33 @@ class Logiq(commands.Bot):
 
         async def on_tree_error(interaction: discord.Interaction, error: app_commands.AppCommandError):
             log = logging.getLogger("logiq.app_commands")
+            qualified = getattr(interaction.command, "qualified_name", "unknown")
+
+            if isinstance(error, CommandSignatureMismatch):
+                log.warning(
+                    "Command signature mismatch for %s; attempting re-sync",
+                    qualified,
+                )
+                try:
+                    if interaction.guild:
+                        await self.tree.sync(guild=interaction.guild)
+                    else:
+                        await self.tree.sync()
+                except Exception:
+                    log.exception("Failed to resync after signature mismatch")
+                try:
+                    msg = "Les commandes ont été rafraîchies. Réessaie dans quelques secondes."
+                    if interaction.response.is_done():
+                        await interaction.followup.send(msg, ephemeral=True)
+                    else:
+                        await interaction.response.send_message(msg, ephemeral=True)
+                except Exception:
+                    log.exception("Failed to send signature-mismatch response")
+                return
+
             log.error(
                 "App command error in %s: %r",
-                getattr(interaction.command, "qualified_name", "unknown"),
+                qualified,
                 error,
                 exc_info=True,
             )
