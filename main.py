@@ -83,6 +83,12 @@ class Logiq(commands.Bot):
                     "Command signature mismatch for %s; attempting re-sync",
                     qualified,
                 )
+                # Keep the interaction alive to avoid "Unknown interaction"
+                if not interaction.response.is_done():
+                    try:
+                        await interaction.response.defer(ephemeral=True, thinking=True)
+                    except Exception:
+                        log.exception("Failed to defer interaction after signature mismatch")
                 try:
                     if interaction.guild:
                         await self.tree.sync(guild=interaction.guild)
