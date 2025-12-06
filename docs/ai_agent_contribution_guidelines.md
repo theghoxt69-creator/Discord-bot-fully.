@@ -81,17 +81,21 @@ maintainable._
       )
   ```
 
-* **Registration best practice**: rely on `bot.add_cog` to register group
-  commands. `discord.py` automatically adds an `app_commands.Group` that lives
-  on a cog to the bot’s `CommandTree`.
+* **Registration best practice**: register the **bound instance** in `setup` so
+  callbacks stay wired to the cog:
 
   ```python
   async def setup(bot: commands.Bot):
-      await bot.add_cog(VCMod(bot, bot.db))
+      cog = VCMod(bot, bot.db)
+      await bot.add_cog(cog)
+      existing = bot.tree.get_command("vcmod")
+      if existing:
+          bot.tree.remove_command("vcmod", type=discord.AppCommandType.chat_input)
+      bot.tree.add_command(cog.vcmod)  # bind the instance, not the class
   ```
 
-  Avoid direct `bot.tree.add_command(...)` or `remove_command(...)` unless you
-  have a very specific reason and document it clearly.
+  Adding the class attribute (`VCMod.vcmod`) directly can trigger
+  `CommandSignatureMismatch` and “application didn’t respond”.
 
 ### 3.3 Interaction responses
 
@@ -288,6 +292,11 @@ def _hierarchy_block(self, moderator: discord.Member, target: discord.Member) ->
 
 * Never leave an interaction without a final response in the exception path.
 
+### 7.3 Command sync & binding hygiene
+- Keep `/sync` global (`tree.sync()`) unless a guild-only sync is explicitly required.
+- After changing command structure/choices, restart and run `/sync` to avoid stale definitions.
+- When registering grouped commands, add the bound cog instance to the tree (see §3.2) to avoid `CommandSignatureMismatch` and timeouts.
+
 ---
 
 ## 8. VC Moderation & Time-Limited Actions
@@ -305,7 +314,7 @@ For features like VC suspension:
 * When lifting a suspension:
 
   * Update DB record (set `active=False`, `resolved_at`, `resolved_by`).
-  * Remove timeout via `user.edit(communication_disabled_until=None, ...)`.
+  * Apply/clear timeouts with the discord.py API: `member.timeout(timedelta, reason=...)` and `member.timeout(None, reason=...)`. Do **not** pass the raw `communication_disabled_until` field to `Member.edit` on discord.py 2.x.
 
 ---
 
