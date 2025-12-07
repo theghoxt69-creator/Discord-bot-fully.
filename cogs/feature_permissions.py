@@ -12,7 +12,9 @@ from discord.ext import commands
 from database.db_manager import DatabaseManager
 from database.models import FeatureKey
 from utils.embeds import EmbedFactory, EmbedColor
-from utils.feature_permissions import FeaturePermissionManager
+from utils.feature_permissions import FeaturePermissionManager, SENSITIVE_FEATURES
+from utils.security import get_or_bootstrap_security, security_cache
+from utils.denials import DenialLogger
 
 logger = logging.getLogger(__name__)
 
@@ -39,6 +41,9 @@ class FeaturePermissions(commands.Cog):
         self.db = db
         self.manager = bot.perms if hasattr(bot, "perms") else FeaturePermissionManager(db)
         self.log = logging.getLogger("logiq.feature_permissions")
+        self.denials = DenialLogger()
+        if hasattr(self.manager, "denials"):
+            self.manager.denials = self.denials
 
     async def _log_to_mod(self, guild: discord.Guild, embed: discord.Embed):
         guild_config = await self.db.get_guild(guild.id)
@@ -186,6 +191,24 @@ class FeaturePermissions(commands.Cog):
             )
             return
 
+        # Soft safeguard for sensitive features when actor is not admin
+        if feature_enum in SENSITIVE_FEATURES and not interaction.user.guild_permissions.administrator:
+            security = await get_or_bootstrap_security(self.db, interaction.guild)
+            protected_ids = set(security.get("protected_role_ids", []))
+            protected_roles = [interaction.guild.get_role(rid) for rid in protected_ids]
+            highest_protected = max((r.position for r in protected_roles if r), default=-1)
+            if not interaction.user.guild_permissions.manage_guild or interaction.user.top_role.position < highest_protected:
+                if self.denials.should_log(interaction.guild.id, interaction.user.id, "perms", feature_enum.value):
+                    logger.warning("Sensitive feature change denied for %s in guild %s", interaction.user.id, interaction.guild.id)
+                await interaction.followup.send(
+                    embed=EmbedFactory.error(
+                        "Permission Denied",
+                        "You must be Manage Guild and at least as high as protected roles to change this sensitive feature."
+                    ),
+                    ephemeral=True
+                )
+                return
+
         old_doc = await self._get_feature_doc(interaction.guild.id, feature_key)
         allowed = set(old_doc.get("allowed_roles", []))
         denied = set(old_doc.get("denied_roles", []))
@@ -247,6 +270,136 @@ class FeaturePermissions(commands.Cog):
             color=EmbedColor.INFO
         )
         await self._log_to_mod(interaction.guild, log_embed)
+
+    def _format_role_mentions(self, guild: discord.Guild, role_ids: List[int]) -> str:
+        roles = []
+        for rid in role_ids:
+            role = guild.get_role(rid)
+            roles.append(role.mention if role else f"<@&{rid}>")
+        return ", ".join(roles) if roles else "None"
+
+    @perms.command(name="security-bootstrap", description="Initialize guild security protected roles")
+    async def security_bootstrap(self, interaction: discord.Interaction):
+        if not _is_config_admin(interaction.user):
+            await interaction.response.send_message(
+                embed=EmbedFactory.error("No Permission", "Only Admin/Manage Guild can configure security."),
+                ephemeral=True
+            )
+            return
+        await interaction.response.defer(ephemeral=True, thinking=True)
+        security = await self.db.get_guild_security(interaction.guild.id)
+        if not security:
+            security = await get_or_bootstrap_security(self.db, interaction.guild)
+        initialized_before = security.get("initialized", False)
+        if not initialized_before:
+            security = await self.db.upsert_guild_security(
+                interaction.guild.id,
+                {
+                    "protected_role_ids": security.get("protected_role_ids", []),
+                    "initialized": True,
+                },
+            )
+            security_cache.set(interaction.guild.id, security)
+        protected_text = self._format_role_mentions(interaction.guild, security.get("protected_role_ids", []))
+        embed = EmbedFactory.success(
+            "Security Bootstrapped" if not initialized_before else "Security Already Initialized",
+            f"Protected roles: {protected_text}\nSecurity initialized: {security.get('initialized', False)}"
+        )
+        await interaction.followup.send(embed=embed, ephemeral=True)
+        await self._log_to_mod(
+            interaction.guild,
+            EmbedFactory.create(
+                title="Security Bootstrap",
+                description=f"{interaction.user.mention} initialized security.\nProtected: {protected_text}",
+                color=EmbedColor.INFO,
+            ),
+        )
+
+    @perms.command(name="security-protected-add", description="Add a protected role")
+    async def security_protected_add(self, interaction: discord.Interaction, role: discord.Role):
+        if not _is_config_admin(interaction.user):
+            await interaction.response.send_message(
+                embed=EmbedFactory.error("No Permission", "Only Admin/Manage Guild can configure security."),
+                ephemeral=True
+            )
+            return
+        await interaction.response.defer(ephemeral=True, thinking=True)
+        security = await self.db.get_guild_security(interaction.guild.id) or {"protected_role_ids": []}
+        protected = set(security.get("protected_role_ids", []))
+        protected.add(role.id)
+        updated = await self.db.upsert_guild_security(
+            interaction.guild.id,
+            {"protected_role_ids": list(protected), "initialized": True},
+        )
+        security_cache.set(interaction.guild.id, updated)
+        protected_text = self._format_role_mentions(interaction.guild, updated.get("protected_role_ids", []))
+        await interaction.followup.send(
+            embed=EmbedFactory.success("Protected Role Added", f"Protected roles: {protected_text}"),
+            ephemeral=True,
+        )
+        await self._log_to_mod(
+            interaction.guild,
+            EmbedFactory.create(
+                title="Protected Role Added",
+                description=f"{role.mention} added by {interaction.user.mention}\nProtected: {protected_text}",
+                color=EmbedColor.INFO,
+            ),
+        )
+
+    @perms.command(name="security-protected-remove", description="Remove a protected role")
+    async def security_protected_remove(self, interaction: discord.Interaction, role: discord.Role):
+        if not _is_config_admin(interaction.user):
+            await interaction.response.send_message(
+                embed=EmbedFactory.error("No Permission", "Only Admin/Manage Guild can configure security."),
+                ephemeral=True
+            )
+            return
+        await interaction.response.defer(ephemeral=True, thinking=True)
+        security = await self.db.get_guild_security(interaction.guild.id) or {"protected_role_ids": []}
+        protected = set(security.get("protected_role_ids", []))
+        if role.id in protected:
+            protected.remove(role.id)
+        if not protected:
+            await interaction.followup.send(
+                embed=EmbedFactory.error("Cannot Remove", "At least one protected role must remain."),
+                ephemeral=True,
+            )
+            return
+        updated = await self.db.upsert_guild_security(
+            interaction.guild.id,
+            {"protected_role_ids": list(protected), "initialized": True},
+        )
+        security_cache.set(interaction.guild.id, updated)
+        protected_text = self._format_role_mentions(interaction.guild, updated.get("protected_role_ids", []))
+        await interaction.followup.send(
+            embed=EmbedFactory.success("Protected Role Removed", f"Protected roles: {protected_text}"),
+            ephemeral=True,
+        )
+        await self._log_to_mod(
+            interaction.guild,
+            EmbedFactory.create(
+                title="Protected Role Removed",
+                description=f"{role.mention} removed by {interaction.user.mention}\nProtected: {protected_text}",
+                color=EmbedColor.WARNING,
+            ),
+        )
+
+    @perms.command(name="security-protected-list", description="List protected roles")
+    async def security_protected_list(self, interaction: discord.Interaction):
+        if not _is_config_admin(interaction.user):
+            await interaction.response.send_message(
+                embed=EmbedFactory.error("No Permission", "Only Admin/Manage Guild can configure security."),
+                ephemeral=True
+            )
+            return
+        await interaction.response.defer(ephemeral=True, thinking=True)
+        security = await get_or_bootstrap_security(self.db, interaction.guild)
+        protected_text = self._format_role_mentions(interaction.guild, security.get("protected_role_ids", []))
+        embed = EmbedFactory.info(
+            "Protected Roles",
+            f"Initialized: {security.get('initialized', False)}\nProtected: {protected_text}"
+        )
+        await interaction.followup.send(embed=embed, ephemeral=True)
 
     @perms.command(name="debug", description="Debug perms wiring")
     async def perms_debug(self, interaction: discord.Interaction):

@@ -15,6 +15,7 @@ from utils.embeds import EmbedFactory, EmbedColor
 from database.db_manager import DatabaseManager
 from database.models import FeatureKey
 from utils.feature_permissions import FeaturePermissionManager
+from utils.security import filter_protected_roles
 from utils.denials import DenialLogger
 
 logger = logging.getLogger(__name__)
@@ -330,6 +331,14 @@ class Verification(commands.Cog):
 
         try:
             # Silently add verified role
+            filtered = await filter_protected_roles(self.db, interaction.guild, [verified_role])
+            if not filtered:
+                await interaction.response.send_message(
+                    embed=EmbedFactory.error("Protected Role", "The configured verified role is protected and cannot be assigned by the bot."),
+                    ephemeral=True
+                )
+                return
+
             await interaction.user.add_roles(verified_role)
 
             # Send private success message

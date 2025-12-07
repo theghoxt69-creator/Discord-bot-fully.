@@ -14,7 +14,8 @@ from discord.utils import utcnow
 from database.db_manager import DatabaseManager
 from database.models import FeatureKey, Suspension
 from utils.embeds import EmbedFactory, EmbedColor
-from utils.feature_permissions import FeaturePermissionManager
+from utils.feature_permissions import FeaturePermissionManager, SENSITIVE_FEATURES
+from utils.security import is_protected_member
 
 logger = logging.getLogger(__name__)
 
@@ -32,6 +33,26 @@ class VCMod(commands.Cog):
         self.bot = bot
         self.db = db
         self.perms = bot.perms if hasattr(bot, "perms") else FeaturePermissionManager(db)
+        if hasattr(self.perms, "denials"):
+            # Share denials logger for security lock logs
+            self.denials = self.perms.denials
+        else:
+            self.denials = None
+
+    async def _security_locked(self, interaction: discord.Interaction, feature: FeatureKey) -> bool:
+        if feature not in SENSITIVE_FEATURES:
+            return False
+        ready = await self.perms.security_ready(interaction.guild)
+        if ready:
+            return False
+        embed = EmbedFactory.error(
+            "Security Setup Required",
+            "Sensitive moderation commands are locked until an admin runs `/perms security-bootstrap` and confirms protected roles."
+        )
+        await interaction.followup.send(embed=embed, ephemeral=True)
+        if self.denials and self.denials.should_log(interaction.guild.id, interaction.user.id, "vcmod", feature.value):
+            logger.warning("Sensitive feature %s blocked due to uninitialized security in guild %s", feature.value, interaction.guild.id)
+        return True
 
     async def _log_to_mod(self, guild: discord.Guild, embed: discord.Embed):
         guild_config = await self.db.get_guild(guild.id)
@@ -107,6 +128,8 @@ class VCMod(commands.Cog):
             return
 
         try:
+            if await self._security_locked(interaction, FeatureKey.MOD_VC_SUSPEND):
+                return
             if not await self._can_use(interaction.user, FeatureKey.MOD_VC_SUSPEND):
                 await interaction.followup.send(
                     embed=EmbedFactory.error("No Permission", "You do not have permission to use this command."),
@@ -119,6 +142,12 @@ class VCMod(commands.Cog):
                 await interaction.followup.send(
                     embed=EmbedFactory.error("Cannot Suspend", block),
                     ephemeral=True
+                )
+                return
+            if await is_protected_member(self.db, interaction.guild, user):
+                await interaction.followup.send(
+                    embed=EmbedFactory.error("Protected Member", "This member is protected; suspension is not allowed."),
+                    ephemeral=True,
                 )
                 return
 
@@ -217,6 +246,8 @@ class VCMod(commands.Cog):
             return
 
         try:
+            if await self._security_locked(interaction, FeatureKey.MOD_VC_UNSUSPEND):
+                return
             if not await self._can_use(interaction.user, FeatureKey.MOD_VC_UNSUSPEND):
                 await interaction.followup.send(
                     embed=EmbedFactory.error("No Permission", "You do not have permission to use this command."),
@@ -229,6 +260,12 @@ class VCMod(commands.Cog):
                 await interaction.followup.send(
                     embed=EmbedFactory.error("Cannot Unsuspend", block),
                     ephemeral=True
+                )
+                return
+            if await is_protected_member(self.db, interaction.guild, user):
+                await interaction.followup.send(
+                    embed=EmbedFactory.error("Protected Member", "This member is protected; unsuspension checks passed, but modification is blocked."),
+                    ephemeral=True,
                 )
                 return
 

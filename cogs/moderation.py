@@ -16,8 +16,9 @@ from utils.permissions import is_moderator, PermissionChecker
 from utils.converters import TimeConverter
 from database.db_manager import DatabaseManager
 from database.models import Warning, Report, FeatureKey
-from utils.feature_permissions import FeaturePermissionManager
+from utils.feature_permissions import FeaturePermissionManager, SENSITIVE_FEATURES
 from utils.denials import DenialLogger
+from utils.security import is_protected_member
 
 logger = logging.getLogger(__name__)
 
@@ -40,6 +41,45 @@ class Moderation(commands.Cog):
         self.report_cooldowns = {}
         self.perms = bot.perms if hasattr(bot, "perms") else FeaturePermissionManager(db)
         self.denials = DenialLogger()
+
+    async def _security_locked(self, interaction: discord.Interaction, feature: FeatureKey) -> bool:
+        if feature not in SENSITIVE_FEATURES:
+            return False
+        ready = await self.perms.security_ready(interaction.guild)
+        if ready:
+            return False
+        if not interaction.response.is_done():
+            await interaction.response.send_message(
+                embed=EmbedFactory.error(
+                    "Security Setup Required",
+                    "Sensitive moderation commands are locked until an admin runs `/perms security-bootstrap` and confirms protected roles."
+                ),
+                ephemeral=True
+            )
+        else:
+            await interaction.followup.send(
+                embed=EmbedFactory.error(
+                    "Security Setup Required",
+                    "Sensitive moderation commands are locked until an admin runs `/perms security-bootstrap` and confirms protected roles."
+                ),
+                ephemeral=True
+            )
+        if self.denials.should_log(interaction.guild.id, interaction.user.id, "moderation", feature.value):
+            logger.warning("Sensitive feature %s blocked due to uninitialized security in guild %s", feature.value, interaction.guild.id)
+        return True
+
+    async def _block_protected_target(self, interaction: discord.Interaction, target: discord.Member) -> bool:
+        if await is_protected_member(self.db, interaction.guild, target):
+            embed = EmbedFactory.error(
+                "Protected Member",
+                "This member is protected; this action cannot be performed by the bot."
+            )
+            if interaction.response.is_done():
+                await interaction.followup.send(embed=embed, ephemeral=True)
+            else:
+                await interaction.response.send_message(embed=embed, ephemeral=True)
+            return True
+        return False
 
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message):
@@ -277,6 +317,8 @@ class Moderation(commands.Cog):
         reason: str
     ):
         """Warn a user"""
+        if await self._security_locked(interaction, FeatureKey.MOD_WARN):
+            return
         allowed = await self.perms.check(
             interaction.user,
             FeatureKey.MOD_WARN,
@@ -288,6 +330,8 @@ class Moderation(commands.Cog):
                 ephemeral=True
             )
             await self._maybe_log_denial(interaction, FeatureKey.MOD_WARN, "warn")
+            return
+        if await self._block_protected_target(interaction, user):
             return
 
         # Create warning
@@ -384,6 +428,8 @@ class Moderation(commands.Cog):
         reason: str = "No reason provided"
     ):
         """Timeout a user"""
+        if await self._security_locked(interaction, FeatureKey.MOD_TIMEOUT):
+            return
         allowed = await self.perms.check(
             interaction.user,
             FeatureKey.MOD_TIMEOUT,
@@ -403,6 +449,8 @@ class Moderation(commands.Cog):
                 embed=EmbedFactory.error("Invalid Duration", "Duration must be valid and less than 28 days"),
                 ephemeral=True
             )
+            return
+        if await self._block_protected_target(interaction, user):
             return
 
         try:
@@ -444,6 +492,8 @@ class Moderation(commands.Cog):
         reason: str = "No reason provided"
     ):
         """Kick a user"""
+        if await self._security_locked(interaction, FeatureKey.MOD_KICK):
+            return
         allowed = await self.perms.check(
             interaction.user,
             FeatureKey.MOD_KICK,
@@ -455,6 +505,8 @@ class Moderation(commands.Cog):
                 ephemeral=True
             )
             await self._maybe_log_denial(interaction, FeatureKey.MOD_KICK, "kick")
+            return
+        if await self._block_protected_target(interaction, user):
             return
 
         try:
@@ -497,6 +549,8 @@ class Moderation(commands.Cog):
         delete_messages: int = 0
     ):
         """Ban a user"""
+        if await self._security_locked(interaction, FeatureKey.MOD_BAN):
+            return
         allowed = await self.perms.check(
             interaction.user,
             FeatureKey.MOD_BAN,
@@ -508,6 +562,8 @@ class Moderation(commands.Cog):
                 ephemeral=True
             )
             await self._maybe_log_denial(interaction, FeatureKey.MOD_BAN, "ban")
+            return
+        if await self._block_protected_target(interaction, user):
             return
 
         if delete_messages < 0 or delete_messages > 7:
@@ -607,6 +663,8 @@ class Moderation(commands.Cog):
         user: Optional[discord.Member] = None
     ):
         """Clear messages from channel"""
+        if await self._security_locked(interaction, FeatureKey.MOD_CLEAR):
+            return
         allowed = await self.perms.check(
             interaction.user,
             FeatureKey.MOD_CLEAR,
@@ -665,6 +723,8 @@ class Moderation(commands.Cog):
     @is_moderator()
     async def slowmode(self, interaction: discord.Interaction, seconds: int):
         """Set slowmode for channel"""
+        if await self._security_locked(interaction, FeatureKey.MOD_SLOWMODE):
+            return
         allowed = await self.perms.check(
             interaction.user,
             FeatureKey.MOD_SLOWMODE,
@@ -719,6 +779,8 @@ class Moderation(commands.Cog):
     @is_moderator()
     async def lock(self, interaction: discord.Interaction, channel: Optional[discord.TextChannel] = None):
         """Lock a channel"""
+        if await self._security_locked(interaction, FeatureKey.MOD_LOCK):
+            return
         allowed = await self.perms.check(
             interaction.user,
             FeatureKey.MOD_LOCK,
@@ -763,6 +825,8 @@ class Moderation(commands.Cog):
     @is_moderator()
     async def unlock(self, interaction: discord.Interaction, channel: Optional[discord.TextChannel] = None):
         """Unlock a channel"""
+        if await self._security_locked(interaction, FeatureKey.MOD_LOCK):
+            return
         allowed = await self.perms.check(
             interaction.user,
             FeatureKey.MOD_LOCK,
@@ -826,6 +890,8 @@ class Moderation(commands.Cog):
                 ephemeral=True
             )
             await self._maybe_log_denial(interaction, FeatureKey.MOD_NICKNAME, "nickname")
+            return
+        if await self._block_protected_target(interaction, user):
             return
 
         try:

@@ -124,6 +124,11 @@ python main.py
 - Music & Alerts: `music.dj.basic`, `music.dj.volume`, `alerts.manage`, `alerts.view`
 - Temp Voice, Utility, Analytics: `tempvoice.setup`, `tempvoice.owner.power`, `utility.poll`, `analytics.view`
 
+**Guild Security & Protected Roles**
+- Sensitive commands (ban/kick/timeout/lock/slowmode/VC suspend, tickets admin, staffapp template manage) are locked until an admin runs `/perms security-bootstrap` and confirms protected roles.
+- Protected roles (detected automatically: administrator/manage_guild) and the guild owner cannot be targeted by destructive actions or have roles assigned/removed by the bot.
+- Manage protected roles with `/perms security-protected-add|remove|list`; keep at least one protected role.
+
 ### 🎁 Giveaway System
 - **Button-based entry** - Easy participation
 - **Multiple winners** - Support for multiple winners
