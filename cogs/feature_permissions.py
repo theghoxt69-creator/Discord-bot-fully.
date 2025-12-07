@@ -58,8 +58,20 @@ class FeaturePermissions(commands.Cog):
         except discord.Forbidden:
             logger.warning(f"Cannot send feature-perms log to channel {channel} in {guild}")
 
-    def _feature_choices(self) -> List[app_commands.Choice[str]]:
-        return [app_commands.Choice(name=key.value, value=key.value) for key in FeatureKey]
+    async def feature_autocomplete(
+        self,
+        interaction: discord.Interaction,
+        current: str,
+    ) -> List[app_commands.Choice[str]]:
+        """Autocomplete feature keys (Discord limit: 25 choices)."""
+        current_lower = current.lower()
+        choices = []
+        for key in FeatureKey:
+            if current_lower in key.value.lower() or not current_lower:
+                choices.append(app_commands.Choice(name=key.value, value=key.value))
+            if len(choices) >= 25:
+                break
+        return choices
 
     async def _get_feature_doc(self, guild_id: int, feature_key: str) -> Dict:
         return await self.db.get_feature_permission(guild_id, feature_key) or {}
@@ -100,23 +112,23 @@ class FeaturePermissions(commands.Cog):
         await interaction.followup.send(embed=embed, ephemeral=True)
 
     @perms.command(name="feature-allow", description="Allow a role to use a feature")
-    @app_commands.choices(feature=[app_commands.Choice(name=k.value, value=k.value) for k in FeatureKey])
-    async def feature_allow(self, interaction: discord.Interaction, feature: app_commands.Choice[str], role: discord.Role):
-        await self._update_feature(interaction, feature.value, role, action="allow")
+    @app_commands.autocomplete(feature=feature_autocomplete)
+    async def feature_allow(self, interaction: discord.Interaction, feature: str, role: discord.Role):
+        await self._update_feature(interaction, feature, role, action="allow")
 
     @perms.command(name="feature-deny", description="Deny a role from using a feature")
-    @app_commands.choices(feature=[app_commands.Choice(name=k.value, value=k.value) for k in FeatureKey])
-    async def feature_deny(self, interaction: discord.Interaction, feature: app_commands.Choice[str], role: discord.Role):
-        await self._update_feature(interaction, feature.value, role, action="deny")
+    @app_commands.autocomplete(feature=feature_autocomplete)
+    async def feature_deny(self, interaction: discord.Interaction, feature: str, role: discord.Role):
+        await self._update_feature(interaction, feature, role, action="deny")
 
     @perms.command(name="feature-clear", description="Remove a role from allow/deny for a feature")
-    @app_commands.choices(feature=[app_commands.Choice(name=k.value, value=k.value) for k in FeatureKey])
-    async def feature_clear(self, interaction: discord.Interaction, feature: app_commands.Choice[str], role: discord.Role):
-        await self._update_feature(interaction, feature.value, role, action="clear")
+    @app_commands.autocomplete(feature=feature_autocomplete)
+    async def feature_clear(self, interaction: discord.Interaction, feature: str, role: discord.Role):
+        await self._update_feature(interaction, feature, role, action="clear")
 
     @perms.command(name="feature-reset", description="Reset feature permissions to default")
-    @app_commands.choices(feature=[app_commands.Choice(name=k.value, value=k.value) for k in FeatureKey])
-    async def feature_reset(self, interaction: discord.Interaction, feature: app_commands.Choice[str]):
+    @app_commands.autocomplete(feature=feature_autocomplete)
+    async def feature_reset(self, interaction: discord.Interaction, feature: str):
         try:
             await interaction.response.defer(ephemeral=True, thinking=True)
         except Exception:
