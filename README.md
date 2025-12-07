@@ -116,10 +116,13 @@ python main.py
 
 ### 🔐 Permissions & Roles (Feature Keys)
 - Configure with `/perms feature-*` (Admin/Manage Guild). Admin/owner always bypass feature restrictions (but not Discord perms).
-- Staff applications: `staffapp.template.manage`, `staffapp.review`
-- Tickets: `tickets.admin`, `tickets.close` (optional: `tickets.create`)
-- Moderation: `mod.warn`, `mod.warnings`, `mod.timeout`, `mod.kick`, `mod.ban`, `mod.clear`, `mod.slowmode`, `mod.lock`, `mod.nickname`
-- VC moderation: `mod.vc_suspend`, `mod.vc_unsuspend`
+- Staff applications: `staffapp.template.manage`, `staffapp.review`; Tickets: `tickets.admin`, `tickets.close` (optional: `tickets.create`)
+- Moderation: `mod.warn`, `mod.warnings`, `mod.timeout`, `mod.kick`, `mod.ban`, `mod.clear`, `mod.slowmode`, `mod.lock`, `mod.nickname`; VC moderation: `mod.vc_suspend`, `mod.vc_unsuspend`
+- Verification & Games: `verify.config`, `games.panel.manage`
+- Roles & Economy: `roles.menu.manage`, `roles.force.assign`, `economy.admin.adjust`
+- Leveling & Giveaways: `leveling.admin.set`, `leveling.admin.reset`, `giveaway.create`, `giveaway.manage`
+- Music & Alerts: `music.dj.basic`, `music.dj.volume`, `alerts.manage`, `alerts.view`
+- Temp Voice, Utility, Analytics: `tempvoice.setup`, `tempvoice.owner.power`, `utility.poll`, `analytics.view`
 
 ### 🎁 Giveaway System
 - **Button-based entry** - Easy participation
