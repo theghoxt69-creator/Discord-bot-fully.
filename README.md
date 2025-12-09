@@ -149,6 +149,7 @@ python main.py
       enabled: false
   ```
 - Missing entries default to `enabled: true` for backward compatibility. Skipped cogs log as “Skipping cog <name> (disabled in config.modules)”.
+- See `config.minimal.example.yaml` for a moderation-only template (tickets, moderation/report, vcmod, perms, staff applications) with other cogs disabled.
 
 ## 🧾 Logging Channels
 - Configure a default log channel with `/setlogchannel` (also seeds `log_channels.default`).
