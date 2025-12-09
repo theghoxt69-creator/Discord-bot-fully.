@@ -150,6 +150,10 @@ python main.py
   ```
 - Missing entries default to `enabled: true` for backward compatibility. Skipped cogs log as “Skipping cog <name> (disabled in config.modules)”.
 
+## 🧾 Logging Channels
+- Configure a default log channel with `/setlogchannel` (also seeds `log_channels.default`).
+- Use `/setlogchannel-advanced` to route specific events to dedicated channels: `reports`, `moderation`, `vcmod`, `tickets`, `feature_permissions` (fallback to `default` if unset).
+
 ### 🎁 Giveaway System
 - **Button-based entry** - Easy participation
 - **Multiple winners** - Support for multiple winners
