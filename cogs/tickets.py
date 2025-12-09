@@ -370,8 +370,7 @@ class Tickets(commands.Cog):
         view = TicketCreateView(self)
         await interaction.response.send_message(
             embed=embed,
-            view=view,
-            ephemeral=True
+            view=view
         )
 
     @app_commands.command(name="close-ticket", description="Close a ticket (Admin/Staff)")
