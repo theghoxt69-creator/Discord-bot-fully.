@@ -480,6 +480,17 @@ class Moderation(commands.Cog):
                 ephemeral=True
             )
 
+    @timeout.error
+    async def timeout_error(self, interaction: discord.Interaction, error: app_commands.AppCommandError):
+        if isinstance(error, app_commands.TransformerError):
+            msg = "Please select a valid server member to timeout."
+            if interaction.response.is_done():
+                await interaction.followup.send(embed=EmbedFactory.error("Invalid User", msg), ephemeral=True)
+            else:
+                await interaction.response.send_message(embed=EmbedFactory.error("Invalid User", msg), ephemeral=True)
+            return
+        raise error
+
     @app_commands.command(name="kick", description="Kick a user")
     @app_commands.describe(
         user="User to kick",
