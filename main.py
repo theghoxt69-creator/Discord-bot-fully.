@@ -63,7 +63,7 @@ class Logiq(commands.Bot):
             self.logger.info("Database connected successfully")
         except Exception as e:
             self.logger.error(f"Failed to connect to database: {e}", exc_info=True)
-            sys.exit(1)
+            #sys.exit(1)
 
         # Load cogs
         await self.load_cogs()
